@@ -13,7 +13,7 @@ sysinfo.txt
 # Visual Studio / MonoDevelop / Rider generated #
 # ============================================= #
 [Ee]xported[Oo]bj/
-.vs/
+MegaMan/.vs/
 /*.userprefs
 /*.csproj
 /*.pidb
