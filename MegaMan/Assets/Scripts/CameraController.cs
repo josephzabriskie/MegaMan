@@ -8,7 +8,7 @@ public class CameraController : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
-        offset = new Vector3(0.0f, 0.0f, -10.0f);
+        offset = new Vector3(0.0f, 0.0f, -50.0f);
 	}
 	
 	// Update is called once per frame
