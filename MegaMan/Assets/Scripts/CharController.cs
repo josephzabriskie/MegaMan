@@ -3,6 +3,9 @@ using System.Collections;
 
 public class CharController : MonoBehaviour {
 
+	enum jump { none, jump, doublejump, walljump};
+	int jumpflag;
+
 	//player public variables
     public float maxSpeed = 3.0f; // What is our speed capped at
 	public float playerAccel = 10.0f; // how fast do we accelerate when pressing movement keys
@@ -96,6 +99,8 @@ public class CharController : MonoBehaviour {
 			else
 				rbody.velocity = new Vector2(-maxSpeed, rbody.velocity.y);
 		}
+		Jump(jumpflag);
+		jumpflag = (int)jump.none;
 
         if (move > 0 && !facingRight && grounded)
             Flip();
@@ -110,12 +115,10 @@ public class CharController : MonoBehaviour {
 		{
 			if (grounded) //Do a regular jump
 			{
-				rbody.velocity = new Vector2(0, jumpForce);
+				jumpflag = (int)jump.jump;
 			}
 			else if (canDoubleJump && !grounded) { //if we are jumping and not grounded, we better trigger doublejump
-				anim.SetTrigger ("DoubleJump");
-				canDoubleJump = false;
-				rbody.velocity = new Vector2 (0, jumpForce);
+				jumpflag = (int)jump.doublejump;
 			}
 			//else if (wallStuck) { //if we're on a wall, we want to wall jump
 			//	wallStuck = false;
@@ -132,6 +135,25 @@ public class CharController : MonoBehaviour {
         theScale.x *= -1;
         transform.localScale = theScale;
     }
+
+	void Jump(int jumpnum)
+	{
+		if (jumpnum == (int)jump.jump) //Do a regular jump
+		{
+			rbody.velocity = new Vector2(0, jumpForce);
+		}
+		else if (jumpnum == (int)jump.doublejump)
+		{ //if we are jumping and not grounded, we better trigger doublejump
+			anim.SetTrigger("DoubleJump");
+			canDoubleJump = false;
+			rbody.velocity = new Vector2(0, jumpForce);
+		}
+		//else if (jumpnum == (int)jump.walljump) { //if we're on a wall, we want to wall jump
+		//	wallStuck = false;
+		//	rbody.constraints = RigidbodyConstraints2D.FreezeRotation;
+		//	rbody.velocity = new Vector2 (0, jumpForce);
+		//}
+	}
 
 	void OnTriggerEnter2D(Collider2D other)
 	{

@@ -19,7 +19,7 @@ MegaMan/.vs/
 /*.csproj
 /*.pidb
 /*.suo
-/*.sln*
+MegaMan/*.sln*
 /*.sln
 /*.user
 /*.unityproj
