@@ -9,12 +9,15 @@ public class CharController : MonoBehaviour {
 	float vertInput;
 
 	//player public variables
+	public float maxRunSpeed = 7.5f; //How fast can the player move through running
 	public float maxSpeedx = 7.5f; // What is our x speed capped at
 	public float maxSpeedy = 30.0f;// What is our y speed capped at
-	public float playerAccel = 10.0f; // how fast do we accelerate when pressing movement keys
-	public float playerDecel = 10.0f; // how fast do we decelerate when we don't press movement keys
-	public float playerAirDecel = 10.0f; // how fast do we decelerate in the air?
-	public float jumpForce = 10; // how high do we jump
+	public float groundAccel = 100.0f; // how fast do we accelerate when pressing movement keys
+	public float groundDecel = 75.0f; // how fast do we decelerate when we don't press movement keys
+	public float airAccel = 50.0f;
+	public float airDecel = 20.0f; // how fast do we decelerate in the air?
+	public float jumpForce = 10.0f; // how high do we jump
+	public float gravAccel = -32.0f;
 	public Transform spawnPoint; // Where in the scene do we teleport to when we die
 	public BoxCollider2D wallBoxRight;
 	public BoxCollider2D wallBoxLeft;
@@ -59,7 +62,6 @@ public class CharController : MonoBehaviour {
 	// Update is called once per frame Fixed update is for physics stuff
 	void FixedUpdate()
 	{
-		float gravAccel = -32.0f;
 		bool nearWallRight, nearWallLeft;
 		UpdatePlayerStateP(out nearWallRight, out nearWallLeft);
 
@@ -67,35 +69,11 @@ public class CharController : MonoBehaviour {
 
 		//Set float var for animator
 		anim.SetFloat("vSpeed", rbody.velocity.y);
-
 		anim.SetFloat("Speed", Mathf.Abs(horizInput));
-		if (horizInput != 0) // If player is giving movement input
-		{
-			vAdd = (playerAccel * Time.deltaTime); // v = v1 + a*t
-			if (horizInput < 0)
-				vAdd *= -1.0f;
-			rbody.velocity = new Vector2(rbody.velocity.x + vAdd, rbody.velocity.y);
-		}
-		else // If player is not giving movement input and we're grounded, we need to slow down if grounded
-		{
-			float decel;
-			if (!grounded)
-				decel = playerAirDecel;
-			else
-				decel = playerDecel;
-			vAdd = (decel * Time.deltaTime); //Calc how much we slow down by
-			if (Mathf.Abs(rbody.velocity.x) < Mathf.Abs(vAdd)) // if the slow down amound is more than our current velocity
-				rbody.velocity = new Vector2(0, rbody.velocity.y); // just set to 0
-			else if (rbody.velocity.x > 0)  // if we're moving right
-				rbody.velocity = new Vector2(rbody.velocity.x - vAdd, rbody.velocity.y); // reduce right velocity by vAdd
-			else                            // else we're moving left
-				rbody.velocity = new Vector2(rbody.velocity.x + vAdd, rbody.velocity.y); // reduce left velocity by vAdd
-		}
 
-		//Add Gravity
-		Vector2 curvel = rbody.velocity;
-		vAdd = gravAccel * Time.deltaTime;
-		rbody.velocity = new Vector2 (curvel.x, curvel.y + vAdd);
+		MoveCharX ();
+
+		applyGravity ();
 		
 		//Make sure we're not going over max speed
 		if (Mathf.Abs(rbody.velocity.x) > maxSpeedx) //X
@@ -187,9 +165,36 @@ public class CharController : MonoBehaviour {
 		sr.flipX = !sr.flipX;
 	}
 
-	void MoveChar() // Add or subtract horizontal velocity based on given input
+	void MoveCharX() // Add or subtract horizontal velocity based on given input
 	{
-
+		float vAdd;
+		if (horizInput != 0) // If player is giving movement input
+		{
+			if (grounded)
+				vAdd = groundAccel;
+			else
+				vAdd = airAccel;
+			vAdd = vAdd * Time.deltaTime;
+			if (horizInput < 0)
+				vAdd *= -1.0f;
+			rbody.velocity = new Vector2(rbody.velocity.x + vAdd, rbody.velocity.y);
+		}
+		else // If player is not giving movement input and we're grounded, we need to slow down if grounded
+		{
+			if (grounded)
+				vAdd = groundDecel;
+			else
+				vAdd = airDecel;
+			vAdd = (vAdd * Time.deltaTime); //Calc how much we slow down by
+			if (Mathf.Abs (rbody.velocity.x) < Mathf.Abs (vAdd)) // if the slow down amound is more than our current velocity
+			{
+				rbody.velocity = new Vector2 (0, rbody.velocity.y); // just set to 0
+				return;
+			}
+			else if (rbody.velocity.x > 0)  // if we're moving right
+				vAdd *= -1;
+			rbody.velocity = new Vector2(rbody.velocity.x + vAdd, rbody.velocity.y); // reduce left velocity by vAdd
+		}
 	}
 
 	void JumpChar(int jumpnum)
@@ -220,6 +225,14 @@ public class CharController : MonoBehaviour {
 			canDoubleJump = false;
 			rbody.velocity = new Vector2(0, jumpForce);
 		}
+	}
+
+	void applyGravity()
+	{
+		float vAdd;
+		Vector2 curvel = rbody.velocity;
+		vAdd = gravAccel * Time.deltaTime;
+		rbody.velocity = new Vector2 (curvel.x, curvel.y + vAdd);
 	}
 
 	void WallStickChar(bool nearWallRight, bool nearWallLeft)
