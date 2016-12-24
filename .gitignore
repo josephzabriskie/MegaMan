@@ -14,16 +14,16 @@ sysinfo.txt
 # ============================================= #
 [Ee]xported[Oo]bj/
 MegaMan/.vs/
-/*.userprefs
-/*.csproj
-/*.pidb
-/*.suo
+MegaMan/*.userprefs
+MegaMan/*.csproj
+MegaMan/*.pidb
+MegaMan/*.suo
 MegaMan/*.sln*
-/*.sln
-/*.user
-/*.unityproj
-/*.booproj
-/.idea*/
+MegaMan/*.sln
+MegaMan/*.user
+MegaMan/*.unityproj
+MegaMan/*.booproj
+MegaMan/.idea*/
  
 # ============ #
 # OS generated #
