@@ -18,6 +18,7 @@ public class CharController : MonoBehaviour {
 	public float airDecel = 20.0f; // how fast do we decelerate in the air?
 	public float jumpForce = 10.0f; // how high do we jump
 	public float gravAccel = -32.0f;
+	public float wallFriction = 20.0f;
 	public Transform spawnPoint; // Where in the scene do we teleport to when we die
 	public BoxCollider2D wallBoxRight;
 	public BoxCollider2D wallBoxLeft;
@@ -29,12 +30,17 @@ public class CharController : MonoBehaviour {
 	//Physics states
 	bool facingRight = true;
 	bool grounded = false;
-	bool wallStuckRight = false;
-	bool wallStuckLeft = false;
-//	bool nearWallRight = false;
-//	bool nearWallLeft = false;
-	bool canWallStick = true; // we can only stick to walls once
+	//bool wallStuckRight = false;
+	//bool wallStuckLeft = false;
+	bool nearWallRight = false;
+	bool nearWallLeft = false;
+	//bool canWallStick = true; // we can only stick to walls once
+
+	//Gameplaystates
 	bool canDoubleJump = false;
+	bool canWallJumpRight = false;
+	bool canWallJumpLeft = false;
+	bool isWallSliding = false;
 
 	//Gameobject components
 	Animator anim = new Animator(); // is this legit?
@@ -48,24 +54,30 @@ public class CharController : MonoBehaviour {
 		sr = GetComponent<SpriteRenderer>();
 	}
 
-	void UpdatePlayerStateP(out bool nearWallRight, out bool nearWallLeft) { // update player states - Physics
+	void UpdatePlayerStateP() { // update player states - Physics. This is the only place where we set these values. Hopefully
+		//Check for grounded
 		grounded = Physics2D.OverlapBox(groundBox.transform.position, groundBox.size / 2.0f, 0.0f, whatIsGround);
 		anim.SetBool("Ground", grounded);
+
 		nearWallLeft = Physics2D.OverlapBox(wallBoxLeft.transform.position, wallBoxLeft.size / 2.0f, 0.0f, whatIsGround);
 		nearWallRight = Physics2D.OverlapBox(wallBoxRight.transform.position, wallBoxRight.size / 2.0f, 0.0f, whatIsGround);
+
+		//Flip character if we're not facing the right way (only on ground)
+		if (horizInput > 0 && grounded)
+			setFacingRight(true);
+		else if (horizInput < 0 && grounded)
+			setFacingRight(false);
+		
 		if (grounded) {
 			canDoubleJump = true;
-			canWallStick = true;
+			//canWallStick = true;
 		}
 	}
 
 	// Update is called once per frame Fixed update is for physics stuff
 	void FixedUpdate()
 	{
-		bool nearWallRight, nearWallLeft;
-		UpdatePlayerStateP(out nearWallRight, out nearWallLeft);
-
-		float vAdd;
+		UpdatePlayerStateP();
 
 		//Set float var for animator
 		anim.SetFloat("vSpeed", rbody.velocity.y);
@@ -92,17 +104,14 @@ public class CharController : MonoBehaviour {
 		}
 
 		//WallStick code for wall jump
-		WallStickChar(nearWallRight, nearWallLeft);
+			//WallStickChar(nearWallRight, nearWallLeft);
+
+		//checked if we are wall sliding
+		wallSlideChar();
 
 		//Char Jump
 		JumpChar(jumpFlag);
 		jumpFlag = (int)jump.none;
-
-		//Flip character if we're not facing the right way (only on ground)
-		if (horizInput > 0 && grounded)
-			setFacingRight(true);
-		else if (horizInput < 0 && grounded)
-			setFacingRight(false);
 	}
 
 	void Update() // input read more accurately in update vs fixed update
@@ -114,7 +123,8 @@ public class CharController : MonoBehaviour {
 			{
 				jumpFlag = (int)jump.jump;
 			}
-			else if (wallStuckLeft || wallStuckRight)
+			//else if (wallStuckLeft || wallStuckRight)
+			else if (false)
 			{ //if we're on a wall, we want to wall jump
 				jumpFlag = (int)jump.walljump;
 			}
@@ -205,19 +215,19 @@ public class CharController : MonoBehaviour {
 		}
 		else if (jumpnum == (int)jump.walljump)
 		{ //if we're on a wall, we want to wall jump
-			FreezeChar(false);
+			//FreezeChar(false);
 			float totalvelocity = jumpForce * 2.5f;
 			float xpercent = 0.5f;
 			if (vertInput == 1.0f)
 				xpercent = 0.75f;
 			float ypercent = 1.0f - xpercent;
 			Vector2 curvel = rbody.velocity;
-			if (wallStuckRight)
-				xpercent *= -1;
-			rbody.velocity = new Vector2(curvel.x + totalvelocity * xpercent, curvel.y + totalvelocity * ypercent);
-			wallStuckLeft = wallStuckRight = false;
-			anim.SetBool("WallStuckRight", wallStuckRight);
-			anim.SetBool("WallStuckLeft", wallStuckLeft);
+			//if (wallStuckRight)
+			//	xpercent *= -1;
+			//rbody.velocity = new Vector2(curvel.x + totalvelocity * xpercent, curvel.y + totalvelocity * ypercent);
+			//wallStuckLeft = wallStuckRight = false;
+			//anim.SetBool("WallStuckRight", wallStuckRight);
+			//anim.SetBool("WallStuckLeft", wallStuckLeft);
 		}
 		else if (jumpnum == (int)jump.doublejump)
 		{ //if we are jumping and not grounded, we better trigger doublejump
@@ -230,12 +240,24 @@ public class CharController : MonoBehaviour {
 	void applyGravity()
 	{
 		float vAdd;
+		float friction = 0.0f;
+		if (isWallSliding)
+			friction = wallFriction * Time.deltaTime;
+		if (rbody.velocity.y > 0)
+			friction *= -1.0f;
 		Vector2 curvel = rbody.velocity;
-		vAdd = gravAccel * Time.deltaTime;
+		vAdd = gravAccel * Time.deltaTime + friction;
 		rbody.velocity = new Vector2 (curvel.x, curvel.y + vAdd);
 	}
 
-	void WallStickChar(bool nearWallRight, bool nearWallLeft)
+	void wallSlideChar()
+	{
+		if (nearWallRight && horizInput == 1.0f)
+			isWallSliding = true;
+		else
+			isWallSliding = false;
+	}
+/*	void WallStickChar(bool nearWallRight, bool nearWallLeft)
 	{ //Char Stick to walls
 		bool wallStuck = wallStuckRight || wallStuckLeft;
 		if (canWallStick && !wallStuck && vertInput != -1.0f && !grounded)
@@ -278,6 +300,6 @@ public class CharController : MonoBehaviour {
 		{
 			rbody.constraints = RigidbodyConstraints2D.FreezeRotation;
 		}
-	}
+	}*/
 
 }
