@@ -9,16 +9,16 @@ public class CharController : MonoBehaviour {
 	float vertInput;
 
 	//player public variables
-	public float maxRunSpeed = 7.5f; //How fast can the player move through running
-	public float maxSpeedx = 7.5f; // What is our x speed capped at
-	public float maxSpeedy = 30.0f;// What is our y speed capped at
-	public float groundAccel = 100.0f; // how fast do we accelerate when pressing movement keys
-	public float groundDecel = 75.0f; // how fast do we decelerate when we don't press movement keys
-	public float airAccel = 50.0f;
-	public float airDecel = 20.0f; // how fast do we decelerate in the air?
-	public float jumpForce = 10.0f; // how high do we jump
-	public float gravAccel = -32.0f;
-	public float wallFriction = 20.0f;
+	float maxRunSpeed = 10.0f; //How fast can the player move through running
+	float maxSpeedx = 30.0f; // What is our x speed capped at
+	float maxSpeedy = 30.0f;// What is our y speed capped at
+	float groundAccel = 50.0f; // how fast do we accelerate when pressing movement keys
+	float groundDecel = 75.0f; // how fast do we decelerate when we don't press movement keys
+	float airAccel = 15.0f;
+	float airDecel = 0.0f; // how fast do we decelerate in the air?
+	float jumpForce = 11.5f; // how high do we jump
+	float gravAccel = -32.0f;
+	float wallFriction = 25.0f;
 	public Transform spawnPoint; // Where in the scene do we teleport to when we die
 	public BoxCollider2D wallBoxRight;
 	public BoxCollider2D wallBoxLeft;
@@ -61,6 +61,8 @@ public class CharController : MonoBehaviour {
 
 		nearWallLeft = Physics2D.OverlapBox(wallBoxLeft.transform.position, wallBoxLeft.size / 2.0f, 0.0f, whatIsGround);
 		nearWallRight = Physics2D.OverlapBox(wallBoxRight.transform.position, wallBoxRight.size / 2.0f, 0.0f, whatIsGround);
+		//checked if we are wall sliding
+		wallSlideChar();
 
 		//Flip character if we're not facing the right way (only on ground)
 		if (horizInput > 0 && grounded)
@@ -78,40 +80,22 @@ public class CharController : MonoBehaviour {
 	void FixedUpdate()
 	{
 		UpdatePlayerStateP();
-
-		//Set float var for animator
-		anim.SetFloat("vSpeed", rbody.velocity.y);
-		anim.SetFloat("Speed", Mathf.Abs(horizInput));
-
-		MoveCharX ();
-
+		MoveCharX();
 		applyGravity ();
-		
-		//Make sure we're not going over max speed
-		if (Mathf.Abs(rbody.velocity.x) > maxSpeedx) //X
-		{
-			if (rbody.velocity.x > 0)
-				rbody.velocity = new Vector2(maxSpeedx, rbody.velocity.y);
-			else
-				rbody.velocity = new Vector2(-maxSpeedx, rbody.velocity.y);
-		}
-		if (Mathf.Abs(rbody.velocity.y) > maxSpeedy) //Y
-		{
-			if (rbody.velocity.y > 0)
-				rbody.velocity = new Vector2(rbody.velocity.x, maxSpeedy);
-			else
-				rbody.velocity = new Vector2(rbody.velocity.x, -maxSpeedy);
-		}
 
 		//WallStick code for wall jump
-			//WallStickChar(nearWallRight, nearWallLeft);
-
-		//checked if we are wall sliding
-		wallSlideChar();
+		//WallStickChar(nearWallRight, nearWallLeft);
 
 		//Char Jump
 		JumpChar(jumpFlag);
 		jumpFlag = (int)jump.none;
+
+		//Make sure we're not going over max speed
+		maxSpeedCheck();
+
+		//Set float var for animator
+		anim.SetFloat("vSpeed", rbody.velocity.y);
+		anim.SetFloat("Speed", Mathf.Abs(rbody.velocity.x));
 	}
 
 	void Update() // input read more accurately in update vs fixed update
@@ -124,7 +108,7 @@ public class CharController : MonoBehaviour {
 				jumpFlag = (int)jump.jump;
 			}
 			//else if (wallStuckLeft || wallStuckRight)
-			else if (false)
+			else if (isWallSliding)
 			{ //if we're on a wall, we want to wall jump
 				jumpFlag = (int)jump.walljump;
 			}
@@ -178,16 +162,29 @@ public class CharController : MonoBehaviour {
 	void MoveCharX() // Add or subtract horizontal velocity based on given input
 	{
 		float vAdd;
+		bool movingopposite = false; // set to true if the player's input is the opposite of their direction
+		if (horizInput == 1.0f && rbody.velocity.x < 0 || horizInput == -1.0f && rbody.velocity.x > 0)
+			movingopposite = true;
+		
 		if (horizInput != 0) // If player is giving movement input
 		{
 			if (grounded)
+			{
 				vAdd = groundAccel;
+				if (movingopposite) // to help reverse direction on ground faster
+					vAdd *= 1.5f;
+			}
 			else
 				vAdd = airAccel;
 			vAdd = vAdd * Time.deltaTime;
 			if (horizInput < 0)
 				vAdd *= -1.0f;
-			rbody.velocity = new Vector2(rbody.velocity.x + vAdd, rbody.velocity.y);
+			bool breakmaxspeed = Mathf.Abs (rbody.velocity.x + vAdd) > maxRunSpeed;
+			if (!breakmaxspeed || breakmaxspeed && movingopposite) // We add the velocity only if it doesn't put us over max run speed
+				rbody.velocity = new Vector2 (rbody.velocity.x + vAdd, rbody.velocity.y);
+			else //If it would put us over max
+				if (Mathf.Abs (rbody.velocity.x) < maxRunSpeed)// Make sure we're not over max
+					rbody.velocity = new Vector2 (maxRunSpeed * horizInput, rbody.velocity.y); //And then set to max
 		}
 		else // If player is not giving movement input and we're grounded, we need to slow down if grounded
 		{
@@ -211,29 +208,30 @@ public class CharController : MonoBehaviour {
 	{
 		if (jumpnum == (int)jump.jump) //Do a regular jump
 		{
-			rbody.velocity = new Vector2(0, jumpForce);
+			rbody.velocity = new Vector2(rbody.velocity.x, jumpForce);
 		}
-		else if (jumpnum == (int)jump.walljump)
-		{ //if we're on a wall, we want to wall jump
-			//FreezeChar(false);
-			float totalvelocity = jumpForce * 2.5f;
-			float xpercent = 0.5f;
-			if (vertInput == 1.0f)
-				xpercent = 0.75f;
-			float ypercent = 1.0f - xpercent;
-			Vector2 curvel = rbody.velocity;
-			//if (wallStuckRight)
-			//	xpercent *= -1;
-			//rbody.velocity = new Vector2(curvel.x + totalvelocity * xpercent, curvel.y + totalvelocity * ypercent);
-			//wallStuckLeft = wallStuckRight = false;
-			//anim.SetBool("WallStuckRight", wallStuckRight);
-			//anim.SetBool("WallStuckLeft", wallStuckLeft);
+		else if (jumpnum == (int)jump.walljump) //Do a wall jump
+		{
+			if (nearWallLeft && !nearWallRight || nearWallRight && !nearWallLeft)
+			{
+				if (nearWallLeft)
+					rbody.velocity = new Vector2 (1.3f * maxRunSpeed, jumpForce);
+				if (nearWallRight)
+					rbody.velocity = new Vector2 (-1.3f * maxRunSpeed, jumpForce);
+			}
+				
 		}
-		else if (jumpnum == (int)jump.doublejump)
-		{ //if we are jumping and not grounded, we better trigger doublejump
+		else if (jumpnum == (int)jump.doublejump) //If we are jumping and not grounded, we better trigger doublejump
+		{
 			anim.SetTrigger("DoubleJump");
+			float mindoublejumpvel = 0.5f * maxRunSpeed;
 			canDoubleJump = false;
-			rbody.velocity = new Vector2(0, jumpForce);
+			if (horizInput == 1.0f && rbody.velocity.x < 0 || horizInput == -1.0f && rbody.velocity.x > 0) // Flip velocity if moving opposite direction
+				rbody.velocity = new Vector2 (rbody.velocity.x * -1.0f, jumpForce);
+			else if (Mathf.Abs (rbody.velocity.x) < mindoublejumpvel && horizInput != 0.0f)
+				rbody.velocity = new Vector2 (mindoublejumpvel * horizInput, jumpForce);
+			else
+				rbody.velocity = new Vector2(rbody.velocity.x, jumpForce);
 		}
 	}
 
@@ -252,54 +250,28 @@ public class CharController : MonoBehaviour {
 
 	void wallSlideChar()
 	{
-		if (nearWallRight && horizInput == 1.0f)
+		if (nearWallRight && horizInput == 1.0f || nearWallLeft && horizInput == -1.0f)
 			isWallSliding = true;
-		else
-			isWallSliding = false;
-	}
-/*	void WallStickChar(bool nearWallRight, bool nearWallLeft)
-	{ //Char Stick to walls
-		bool wallStuck = wallStuckRight || wallStuckLeft;
-		if (canWallStick && !wallStuck && vertInput != -1.0f && !grounded)
-		{ // If we can stick to walls and we aren't already
-			if (nearWallRight && horizInput == 1.0f)
-			{
-				FreezeChar(true);
-				wallStuckRight = true;
-				anim.SetBool("WallStuckRight", wallStuckRight);
-				setFacingRight(false); // if we're stuck on the right side, we always want to face this way
-			}
-			if (nearWallLeft && horizInput == -1.0f)
-			{
-				FreezeChar(true);
-				wallStuckLeft = true;
-				anim.SetBool("WallStuckLeft", wallStuckLeft);
-				setFacingRight(true); //see above
-			}
-		}
-		else if (wallStuck) //check to see if we should drop
-		{
-			if (vertInput == -1.0f)
-			{
-				FreezeChar(false);
-				wallStuckRight = wallStuckLeft = false;
-				anim.SetBool("WallStuckRight", false);
-				anim.SetBool("WallStuckLeft", false);
-			}
-		}
+		if (isWallSliding)
+			if (nearWallRight && horizInput == -1.0f || nearWallLeft && horizInput == 1.0f || !nearWallLeft && !nearWallRight)
+				isWallSliding = false;
 	}
 
-	void FreezeChar(bool freeze)
+	void maxSpeedCheck()
 	{
-		if (freeze) //Freeze
+		if (Mathf.Abs(rbody.velocity.x) > maxSpeedx) //X
 		{
-			rbody.constraints = RigidbodyConstraints2D.FreezePosition | RigidbodyConstraints2D.FreezeRotation;
-			canWallStick = false;
+			if (rbody.velocity.x > 0)
+				rbody.velocity = new Vector2(maxSpeedx, rbody.velocity.y);
+			else
+				rbody.velocity = new Vector2(-maxSpeedx, rbody.velocity.y);
 		}
-		else //Unfreeze
+		if (Mathf.Abs(rbody.velocity.y) > maxSpeedy) //Y
 		{
-			rbody.constraints = RigidbodyConstraints2D.FreezeRotation;
+			if (rbody.velocity.y > 0)
+				rbody.velocity = new Vector2(rbody.velocity.x, maxSpeedy);
+			else
+				rbody.velocity = new Vector2(rbody.velocity.x, -maxSpeedy);
 		}
-	}*/
-
+	}
 }
