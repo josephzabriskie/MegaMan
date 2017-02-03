@@ -9,37 +9,43 @@ public class CharController : MonoBehaviour {
 	float vertInput;
 
 	//player public variables
+	public int boostCount = 3;
+	public int boostCountMax = 3;
 	float maxRunSpeed = 10.0f; //How fast can the player move through running
 	float maxSpeedx = 30.0f; // What is our x speed capped at
 	float maxSpeedy = 30.0f;// What is our y speed capped at
 	float groundAccel = 50.0f; // how fast do we accelerate when pressing movement keys
-	float groundDecel = 75.0f; // how fast do we decelerate when we don't press movement keys
+	float groundDecel = 80.0f; // how fast do we decelerate when we don't press movement keys
 	float airAccel = 15.0f;
+	float airAccelDefault = 15.0f;
+	float airAccelNoBoost = 50.0f;
 	float airDecel = 0.0f; // how fast do we decelerate in the air?
 	float jumpForce = 11.5f; // how high do we jump
+	float doubleJumpForce = 8.8f;
 	float gravAccel = -32.0f;
 	float wallFriction = 25.0f;
+	float boostModifier = 1.6f;
 	public Transform spawnPoint; // Where in the scene do we teleport to when we die
 	public BoxCollider2D wallBoxRight;
 	public BoxCollider2D wallBoxLeft;
 	public BoxCollider2D groundBox; // our overlapping box for ground detect
 	public LayerMask whatIsGround; // What layer do we check for ground on?
+	public LayerMask whatIsRecharge;
+	public LayerMask WhatIsFreeBoost;
+	public LayerMask WhatIsAccel;
 	public LayerMask whatIsDeathBox; // What layer do we check for death on?
 
 	//player states
 	//Physics states
 	bool facingRight = true;
 	bool grounded = false;
-	//bool wallStuckRight = false;
-	//bool wallStuckLeft = false;
+	bool rechargeGround = false;
+	bool freeBoostGround = false;
+	bool accelGround = false;
 	bool nearWallRight = false;
 	bool nearWallLeft = false;
-	//bool canWallStick = true; // we can only stick to walls once
 
 	//Gameplaystates
-	bool canDoubleJump = false;
-	bool canWallJumpRight = false;
-	bool canWallJumpLeft = false;
 	bool isWallSliding = false;
 
 	//Gameobject components
@@ -58,22 +64,35 @@ public class CharController : MonoBehaviour {
 		//Check for grounded
 		grounded = Physics2D.OverlapBox(groundBox.transform.position, groundBox.size / 2.0f, 0.0f, whatIsGround);
 		anim.SetBool("Ground", grounded);
+		rechargeGround = Physics2D.OverlapBox(groundBox.transform.position, groundBox.size / 2.0f, 0.0f, whatIsRecharge);
+		freeBoostGround = Physics2D.OverlapBox(groundBox.transform.position, groundBox.size / 2.0f, 0.0f, WhatIsFreeBoost);
+		freeBoostGround = freeBoostGround || Physics2D.OverlapBox(wallBoxLeft.transform.position, wallBoxLeft.size / 2.0f, 0.0f, WhatIsFreeBoost);
+		freeBoostGround = freeBoostGround || Physics2D.OverlapBox(wallBoxRight.transform.position, wallBoxRight.size / 2.0f, 0.0f, WhatIsFreeBoost); //TODO, can these be simplified?
+		accelGround = Physics2D.OverlapBox(groundBox.transform.position, groundBox.size / 2.0f, 0.0f, WhatIsAccel);
+		accelGround = accelGround || Physics2D.OverlapBox(wallBoxLeft.transform.position, wallBoxLeft.size / 2.0f, 0.0f, WhatIsAccel);
+		accelGround = accelGround || Physics2D.OverlapBox(wallBoxRight.transform.position, wallBoxRight.size / 2.0f, 0.0f, WhatIsAccel); //TODO, can these be simplified?
 
 		nearWallLeft = Physics2D.OverlapBox(wallBoxLeft.transform.position, wallBoxLeft.size / 2.0f, 0.0f, whatIsGround);
 		nearWallRight = Physics2D.OverlapBox(wallBoxRight.transform.position, wallBoxRight.size / 2.0f, 0.0f, whatIsGround);
 		//checked if we are wall sliding
 		wallSlideChar();
-
+ 
 		//Flip character if we're not facing the right way (only on ground)
 		if (horizInput > 0 && grounded)
 			setFacingRight(true);
 		else if (horizInput < 0 && grounded)
 			setFacingRight(false);
 		
-		if (grounded) {
-			canDoubleJump = true;
-			//canWallStick = true;
+		if (grounded) {}
+
+		if (rechargeGround) {
+			boostCount = boostCountMax;
 		}
+
+		if (boostCount <= 0)
+			airAccel = airAccelNoBoost;
+		else
+			airAccel = airAccelDefault;			
 	}
 
 	// Update is called once per frame Fixed update is for physics stuff
@@ -82,9 +101,6 @@ public class CharController : MonoBehaviour {
 		UpdatePlayerStateP();
 		MoveCharX();
 		applyGravity ();
-
-		//WallStick code for wall jump
-		//WallStickChar(nearWallRight, nearWallLeft);
 
 		//Char Jump
 		JumpChar(jumpFlag);
@@ -107,12 +123,11 @@ public class CharController : MonoBehaviour {
 			{
 				jumpFlag = (int)jump.jump;
 			}
-			//else if (wallStuckLeft || wallStuckRight)
-			else if (isWallSliding)
+			else if (nearWallLeft || nearWallRight)
 			{ //if we're on a wall, we want to wall jump
 				jumpFlag = (int)jump.walljump;
 			}
-			else if (canDoubleJump && !grounded)
+			else if (!grounded)
 			{ //if we are jumping and not grounded, we better trigger doublejump
 				jumpFlag = (int)jump.doublejump;
 			}
@@ -206,18 +221,30 @@ public class CharController : MonoBehaviour {
 
 	void JumpChar(int jumpnum)
 	{
+		if (jumpnum != (int)jump.none && (boostCount > 0 || freeBoostGround)){
+			if (!freeBoostGround) 
+				boostCount--;
+		}
+		else
+			return;
+		float mod = 1.0f;
+		if (accelGround)
+			mod = boostModifier;
+			
 		if (jumpnum == (int)jump.jump) //Do a regular jump
 		{
-			rbody.velocity = new Vector2(rbody.velocity.x, jumpForce);
+			if (horizInput == 1.0f && rbody.velocity.x < 0 || horizInput == -1.0f && rbody.velocity.x > 0) // Flip velocity if moving opposite direction
+				rbody.velocity = new Vector2 (rbody.velocity.x * -1.0f, jumpForce * mod);
+			rbody.velocity = new Vector2(rbody.velocity.x, jumpForce * mod);
 		}
 		else if (jumpnum == (int)jump.walljump) //Do a wall jump
 		{
 			if (nearWallLeft && !nearWallRight || nearWallRight && !nearWallLeft)
 			{
 				if (nearWallLeft)
-					rbody.velocity = new Vector2 (1.3f * maxRunSpeed, jumpForce);
+					rbody.velocity = new Vector2 (1.3f * maxRunSpeed * mod, jumpForce);
 				if (nearWallRight)
-					rbody.velocity = new Vector2 (-1.3f * maxRunSpeed, jumpForce);
+					rbody.velocity = new Vector2 (-1.3f * maxRunSpeed * mod, jumpForce);
 			}
 				
 		}
@@ -225,13 +252,12 @@ public class CharController : MonoBehaviour {
 		{
 			anim.SetTrigger("DoubleJump");
 			float mindoublejumpvel = 0.5f * maxRunSpeed;
-			canDoubleJump = false;
 			if (horizInput == 1.0f && rbody.velocity.x < 0 || horizInput == -1.0f && rbody.velocity.x > 0) // Flip velocity if moving opposite direction
-				rbody.velocity = new Vector2 (rbody.velocity.x * -1.0f, jumpForce);
-			else if (Mathf.Abs (rbody.velocity.x) < mindoublejumpvel && horizInput != 0.0f)
-				rbody.velocity = new Vector2 (mindoublejumpvel * horizInput, jumpForce);
+				rbody.velocity = new Vector2 (rbody.velocity.x * -1.0f, doubleJumpForce * mod);
+			else if (Mathf.Abs (rbody.velocity.x) < mindoublejumpvel && horizInput != 0.0f) //if we're going below minimum speed, give the player a little kick
+				rbody.velocity = new Vector2 (mindoublejumpvel * horizInput, doubleJumpForce * mod);
 			else
-				rbody.velocity = new Vector2(rbody.velocity.x, jumpForce);
+				rbody.velocity = new Vector2(rbody.velocity.x, doubleJumpForce * mod);
 		}
 	}
 
