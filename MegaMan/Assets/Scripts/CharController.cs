@@ -18,11 +18,15 @@ public class CharController : MonoBehaviour {
 	float groundDecel = 80.0f; // how fast do we decelerate when we don't press movement keys
 	float airAccel = 15.0f;
 	float airAccelDefault = 15.0f;
-	float airAccelNoBoost = 50.0f;
+	float airAccelNoBoost = 52.0f;
 	float airDecel = 0.0f; // how fast do we decelerate in the air?
+	float airDecelDefault = 0.0f;
+	float airDecelNoBoost = 25.0f; //When we're out of boost, how fast do we decel in the air?  Might not be used in the end
+	float noBoostMultiplier = 20.0f; //See moveCharY function
+	float noBoostStaticFallSpeed = 0.0f; //the new terminal velocity when we're trying to fly up
 	float jumpForce = 11.5f; // how high do we jump
 	float doubleJumpForce = 8.8f;
-	float gravAccel = -32.0f;
+	float gravAccel = -15.0f; //32
 	float wallFriction = 25.0f;
 	float boostModifier = 1.6f;
 	public Transform spawnPoint; // Where in the scene do we teleport to when we die
@@ -44,9 +48,17 @@ public class CharController : MonoBehaviour {
 	bool accelGround = false;
 	bool nearWallRight = false;
 	bool nearWallLeft = false;
+	bool noBoost = false;
 
 	//Gameplaystates
 	bool isWallSliding = false;
+
+	//Controls
+	KeyCode jumpButton = KeyCode.Space;
+	KeyCode leftButton = KeyCode.LeftArrow;
+	KeyCode RightButton = KeyCode.RightArrow;
+	KeyCode quitButton = KeyCode.Escape;
+
 
 	//Gameobject components
 	Animator anim = new Animator(); // is this legit?
@@ -74,7 +86,7 @@ public class CharController : MonoBehaviour {
 
 		nearWallLeft = Physics2D.OverlapBox(wallBoxLeft.transform.position, wallBoxLeft.size / 2.0f, 0.0f, whatIsGround);
 		nearWallRight = Physics2D.OverlapBox(wallBoxRight.transform.position, wallBoxRight.size / 2.0f, 0.0f, whatIsGround);
-		//checked if we are wall sliding
+		//checked if we are wall sliding to be used for animation
 		wallSlideChar();
  
 		//Flip character if we're not facing the right way (only on ground)
@@ -90,9 +102,16 @@ public class CharController : MonoBehaviour {
 		}
 
 		if (boostCount <= 0)
-			airAccel = airAccelNoBoost;
+			noBoost = true;
 		else
-			airAccel = airAccelDefault;			
+			noBoost = false;
+		
+		if (noBoost) {
+			airAccel = airAccelNoBoost;
+		} else {
+			airAccel = airAccelDefault;
+		}
+
 	}
 
 	// Update is called once per frame Fixed update is for physics stuff
@@ -100,7 +119,7 @@ public class CharController : MonoBehaviour {
 	{
 		UpdatePlayerStateP();
 		MoveCharX();
-		applyGravity ();
+		MoveCharY();
 
 		//Char Jump
 		JumpChar(jumpFlag);
@@ -116,6 +135,7 @@ public class CharController : MonoBehaviour {
 
 	void Update() // input read more accurately in update vs fixed update
 	{
+		//process input
 		//jump and double jump
 		if (Input.GetKeyDown(KeyCode.Space)) //do this method only if you want to have keys not be remappable
 		{
@@ -132,10 +152,9 @@ public class CharController : MonoBehaviour {
 				jumpFlag = (int)jump.doublejump;
 			}
 		}
+
 		if (Input.GetKeyDown (KeyCode.Escape)) 
-		{
 			Application.Quit ();
-		}
 
 		//Get horizInput
 		horizInput = 0.0f;
@@ -183,14 +202,13 @@ public class CharController : MonoBehaviour {
 		
 		if (horizInput != 0) // If player is giving movement input
 		{
-			if (grounded)
-			{
+			if (grounded) {
 				vAdd = groundAccel;
 				if (movingopposite) // to help reverse direction on ground faster
 					vAdd *= 1.5f;
-			}
-			else
+			} else {
 				vAdd = airAccel;
+			}
 			vAdd = vAdd * Time.deltaTime;
 			if (horizInput < 0)
 				vAdd *= -1.0f;
@@ -201,7 +219,7 @@ public class CharController : MonoBehaviour {
 				if (Mathf.Abs (rbody.velocity.x) < maxRunSpeed)// Make sure we're not over max
 					rbody.velocity = new Vector2 (maxRunSpeed * horizInput, rbody.velocity.y); //And then set to max
 		}
-		else // If player is not giving movement input and we're grounded, we need to slow down if grounded
+		else // If player is not giving movement input we need to slow down by some amound depending upon the state
 		{
 			if (grounded)
 				vAdd = groundDecel;
@@ -217,6 +235,21 @@ public class CharController : MonoBehaviour {
 				vAdd *= -1;
 			rbody.velocity = new Vector2(rbody.velocity.x + vAdd, rbody.velocity.y); // reduce left velocity by vAdd
 		}
+	}
+
+	void MoveCharY()
+	{
+		float vAdd;
+		Vector2 curvel = rbody.velocity;
+		//Add gravity
+		vAdd = gravAccel * Time.deltaTime;
+		if (noBoost && vertInput > 0 ){ // if we have no boost, allow the character to accelerate up a little, and have lower terminal velocity
+			//float vtemp = Mathf.Abs(curvel - noBoostStaticFallSpeed)*noBoostMultiplier*Time.deltaTime;
+		}
+
+		//Final velocity set
+		rbody.velocity = new Vector2 (curvel.x, curvel.y + vAdd);
+
 	}
 
 	void JumpChar(int jumpnum)
@@ -259,19 +292,6 @@ public class CharController : MonoBehaviour {
 			else
 				rbody.velocity = new Vector2(rbody.velocity.x, doubleJumpForce * mod);
 		}
-	}
-
-	void applyGravity()
-	{
-		float vAdd;
-		float friction = 0.0f;
-		if (isWallSliding)
-			friction = wallFriction * Time.deltaTime;
-		if (rbody.velocity.y > 0)
-			friction *= -1.0f;
-		Vector2 curvel = rbody.velocity;
-		vAdd = gravAccel * Time.deltaTime + friction;
-		rbody.velocity = new Vector2 (curvel.x, curvel.y + vAdd);
 	}
 
 	void wallSlideChar()
